@@ -1,45 +1,39 @@
+import logging
+from datetime import datetime
 from scapy.all import sniff, IP, TCP, Raw
-import datetime
 
-def analyze_packet(packet):
-    # Check if the packet has IP and TCP layers
-    if packet.haslayer(IP) and packet.haslayer(TCP):
-        src_ip = packet[IP].src
-        dst_ip = packet[IP].dst
-        dst_port = packet[TCP].dport
-        src_port = packet[TCP].sport
+# Setup logger for test execution traceability
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%H:%M:%S')
+logger = logging.getLogger("IoT_Analyzer")
 
-        # We are only interested in unencrypted IoT traffic: HTTP (80) and unencrypted MQTT (1883)
-        if dst_port in [80, 1883] or src_port in [80, 1883]:
-            
-            # Check if the packet contains a raw payload
-            if packet.haslayer(Raw):
-                payload = packet[Raw].load
-                
-                # Determine protocol for the thesis results table
-                protocol = "HTTP" if (dst_port == 80 or src_port == 80) else "MQTT"
-                
-                current_time = datetime.datetime.now().strftime('%H:%M:%S')
-                
-                print(f"[{current_time}] ⚠️ ALERT: Unencrypted {protocol} packet intercepted!")
-                print(f"Route: {src_ip} -> {dst_ip}")
-                
-                try:
-                    # Attempt to decode the payload to read sensor data
-                    decoded_data = payload.decode('utf-8', errors='ignore')
-                    print(f"Intercepted Sensor Data: {decoded_data.strip()}")
-                except Exception as e:
-                    print(f"Raw Payload (undecodable): {payload}")
-                
-                print("-" * 60)
+PORT_MAP = {80: "HTTP", 1883: "MQTT"}
+
+def packet_callback(pkt):
+    """
+    Packet filtering and payload extraction for cleartext vulnerability validation
+    """
+    if not pkt.haslayer(TCP) or not pkt.haslayer(Raw):
+        return
+
+    # Protocol mapping via set intersection (efficient port checking)
+    dport, sport = pkt[TCP].dport, pkt[TCP].sport
+    target_ports = set(PORT_MAP.keys())
+    
+    if target_ports.intersection({dport, sport}):
+        proto = PORT_MAP.get(dport) or PORT_MAP.get(sport)
+        
+        # Raw payload extraction for empirical evidence
+        try:
+            payload = pkt[Raw].load.decode('utf-8', errors='ignore').strip()
+            if payload:
+                logger.info(f"VULNERABILITY EXPOSED [{proto}]: {pkt[IP].src} -> {pkt[IP].dst}")
+                logger.info(f"Captured Payload: {payload}")
+        except Exception:
+            logger.warning("Payload decoding failed (likely binary/encrypted data)")
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("🛡️ Starting IoT Traffic Analyzer (Securing the Edge)")
-    print("📡 Listening on network for unencrypted protocols (HTTP/MQTT)...")
-    print("Press Ctrl+C to stop the script.")
-    print("=" * 60)
-    
-    # Start sniffing. store=0 prevents RAM overload.
-    sniff(filter="tcp port 80 or tcp port 1883", prn=analyze_packet, store=0)
-    
+    logger.info("Initializing cleartext traffic monitor on standard IoT ports...")
+    try:
+        sniff(filter="tcp port 80 or tcp port 1883", prn=packet_callback, store=0)
+    except KeyboardInterrupt:
+        logger.info("Execution terminated by user.")

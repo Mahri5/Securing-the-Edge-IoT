@@ -2,15 +2,14 @@
 #include <WiFi.h>
 #include <DHT.h>
 
-// Replace with your actual Wi-Fi credentials when the board arrives
+// With my actual wifi credidentials
 const char* ssid = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 
-// DHT11 Sensor configuration
+// DHT11 or DHT22 Sensor configuration
 #define DHTPIN 4
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
-
 void setup() {
   Serial.begin(115200);
   dht.begin();
@@ -43,8 +42,7 @@ void loop() {
     Serial.print(t);
     Serial.println(" *C");
   }
-
-  // Wait 5 seconds between measurements
+  // The program will wait 5 seconds between measurements 
   delay(5000);
 }
 
